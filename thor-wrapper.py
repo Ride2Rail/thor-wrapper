@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
 import os
-import random
-import configparser as cp
-
+import json
 import redis
+import random
+import pathlib
+import requests
+import configparser as cp
 from flask import Flask, request
 
 from r2r_offer_utils.logging import setup_logger
 from r2r_offer_utils.cache_operations import read_data_from_cache_wrapper, store_simple_data_to_cache_wrapper
 from r2r_offer_utils.normalization import zscore, minmaxscore
 
-import json
-import requests
+from thor import rank_task
 
 service_name = os.path.splitext(os.path.basename(__file__))[0]
 app = Flask(service_name)
@@ -31,11 +33,12 @@ cache = redis.Redis(host=config.get('cache', 'host'),
 
 
 execution_mode = config.get('running', 'mode')
+rank_task.init(config)
 
 
 # task 1: make a classifier for every user
 @app.route('/classify-all', methods=['POST'])
-def classify_all():
+def classify_all_endpoint():
     data = request.get_json()
     request_id = data['request_id']
 
@@ -55,7 +58,7 @@ def classify_all():
 
 # task 2: cluster all the users exist in user profile folder
 @app.route('/cluster-all', methods=['POST'])
-def cluster_all():
+def cluster_all_endpoint():
     data = request.get_json()
     request_id = data['request_id']
 
@@ -75,7 +78,7 @@ def cluster_all():
 
 # task 3: find a cluster for one or more new users
 @app.route('/cluster-one', methods=['POST'])
-def cluster_one():
+def cluster_one_endpoint():
     data = request.get_json()
     request_id = data['request_id']
 
@@ -95,21 +98,20 @@ def cluster_one():
 
 # task 4: rank travel offers, for a given user
 @app.route('/rank', methods=['POST'])
-def rank():
+def rank_endpoint():
     data = request.get_json()
     request_id = data['request_id']
 
     # ask for the entire list of offer ids
-    offer_data = cache.lrange('{}:offers'.format(request_id), 0, -1)
+    travel_offers = [offer.decode('utf-8')
+                  for offer in cache.lrange('{}:offers'.format(request_id), 0, -1)]
+    user_id = cache.get('{}:user_id'.format(request_id)).decode()
+
+    ranked_offers = rank_task.rank(user_id, travel_offers)
 
     result = {}
     result["request_id"] = request_id
-    result["offers"] = {}
-
-    ranks = list(range(len(offer_data)))
-    random.shuffle(ranks)
-    for offer_id, rank in zip(offer_data, ranks):
-        result["offers"][offer_id.decode()] = rank
+    result["offers"] = ranked_offers
 
     json_object = json.dumps(result) 
     response = app.response_class(
