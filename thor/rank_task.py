@@ -21,24 +21,16 @@ def init(config):
 
     global rank
     global read_offers
-    global classifier_path
-    global travel_offers_path
-    global classifier_path
-    global travel_offers_path
 
-    global users_columns
+    global classifier_path
+    global travel_offers_path
+    global classifier_columns
     global one_hot_col_cat
     global one_hot_col_cat_list
-    global classifier_columns
-    global clustering_columns
-    global target_column
 
-    users_columns = [i.strip() for i in config['thor.columns']['users_columns'].split(',')]
     one_hot_col_cat = [i.strip() for i in config['thor.columns']['one_hot_categorical_columns'].split(',')]
     one_hot_col_cat_list = [i.strip() for i in config['thor.columns']['one_hot_categorical_list_columns'].split(',')]
     classifier_columns = [i.strip() for i in config['thor.columns']['classifier_columns'].split(',')]
-    clustering_columns = [i.strip() for i in config['thor.columns']['clustering_columns'].split(',')]
-    target_column = config['thor.columns']['target_column']
 
     if execution_mode == 'PRODUCTION':
         rank = rank_prod
@@ -92,7 +84,6 @@ def rank_prod(user, travel_offers):
         classifier_model_col = [i.split('\n')[0] for i in f.readlines()]
 
     offer_scores = {}
-    offer_by_score = {}
     for offer_id in travel_offers:
         t_off = read_offers(offer_id)
 
@@ -117,7 +108,6 @@ def rank_prod(user, travel_offers):
 
         pred = classifier_model.predict(classifier_df2)
         class_sco = classifier_model.score(classifier_df2, pred)
-        print(f"{offer_id}: {class_sco}")
         offer_scores[offer_id] = class_sco
 
     offer_by_score = enumerate(sorted(offer_scores.items(),
