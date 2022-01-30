@@ -10,7 +10,7 @@ from flask import Flask, request
 
 from r2r_offer_utils.logging import setup_logger
 
-from thor import rank_task
+from thor import ranker
 
 service_name = os.path.splitext(os.path.basename(__file__))[0]
 app = Flask(service_name)
@@ -31,7 +31,7 @@ cache = redis.Redis(host=config.get('cache', 'host'),
 execution_mode = config.get('running', 'mode')
 
 # initialize submodule
-rank_task.init(config)
+ranker.init(config)
 
 # rank endpoint
 @app.route('/rank', methods=['POST'])
@@ -44,7 +44,7 @@ def rank_endpoint():
                   for offer in cache.lrange('{}:offers'.format(request_id), 0, -1)]
     user_id = cache.get('{}:user_id'.format(request_id)).decode()
 
-    ranked_offers = rank_task.rank(user_id, travel_offers)
+    ranked_offers = ranker.rank(user_id, travel_offers)
 
     result = {}
     result["request_id"] = request_id
