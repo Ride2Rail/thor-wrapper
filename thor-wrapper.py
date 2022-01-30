@@ -4,15 +4,11 @@
 import os
 import json
 import redis
-import random
 import pathlib
-import requests
 import configparser as cp
 from flask import Flask, request
 
 from r2r_offer_utils.logging import setup_logger
-from r2r_offer_utils.cache_operations import read_data_from_cache_wrapper, store_simple_data_to_cache_wrapper
-from r2r_offer_utils.normalization import zscore, minmaxscore
 
 from thor import rank_task
 
@@ -33,70 +29,11 @@ cache = redis.Redis(host=config.get('cache', 'host'),
 
 
 execution_mode = config.get('running', 'mode')
+
+# initialize submodule
 rank_task.init(config)
 
-
-# task 1: make a classifier for every user
-@app.route('/classify-all', methods=['POST'])
-def classify_all_endpoint():
-    data = request.get_json()
-    request_id = data['request_id']
-
-    # ask for the entire list of offer ids
-    offer_data = cache.lrange('{}:offers'.format(request_id), 0, -1)
-    # print(offer_data)
-
-    response = app.response_class(
-        response=f'{{"request_id": "{request_id}"}}',
-        status=200,
-        mimetype='application/json'
-    )
-
- 
-    return response
-
-
-# task 2: cluster all the users exist in user profile folder
-@app.route('/cluster-all', methods=['POST'])
-def cluster_all_endpoint():
-    data = request.get_json()
-    request_id = data['request_id']
-
-    # ask for the entire list of offer ids
-    offer_data = cache.lrange('{}:offers'.format(request_id), 0, -1)
-    # print(offer_data)
-
-    response = app.response_class(
-        response=f'{{"request_id": "{request_id}"}}',
-        status=200,
-        mimetype='application/json'
-    )
-
- 
-    return response
-
-
-# task 3: find a cluster for one or more new users
-@app.route('/cluster-one', methods=['POST'])
-def cluster_one_endpoint():
-    data = request.get_json()
-    request_id = data['request_id']
-
-    # ask for the entire list of offer ids
-    offer_data = cache.lrange('{}:offers'.format(request_id), 0, -1)
-    # print(offer_data)
-
-    response = app.response_class(
-        response=f'{{"request_id": "{request_id}"}}',
-        status=200,
-        mimetype='application/json'
-    )
-
- 
-    return response
-
-
-# task 4: rank travel offers, for a given user
+# rank endpoint
 @app.route('/rank', methods=['POST'])
 def rank_endpoint():
     data = request.get_json()

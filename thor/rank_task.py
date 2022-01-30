@@ -8,9 +8,7 @@ import operator
 
 import pandas as pd
 import sklearn
-import sklearn.cluster
 import sklearn.preprocessing
-import sklearn.metrics
 
 from preprocessing import preprocessing_user_profile
 
