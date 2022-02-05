@@ -12,6 +12,7 @@ from r2r_offer_utils.logging import setup_logger
 
 from thor import ranker
 
+
 service_name = os.path.splitext(os.path.basename(__file__))[0]
 app = Flask(service_name)
 
