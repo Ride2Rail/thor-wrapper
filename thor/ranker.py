@@ -1,87 +1,110 @@
 # -*- coding: utf-8 -*-
 
-import os
-import random
 import pickle
-import pathlib
 import operator
+import pathlib
 
 import pandas as pd
 import sklearn
+import sklearn.tree
 import sklearn.preprocessing
 
+import dev
+import utils
 from preprocessing import preprocessing_user_profile
 
 
 def init(config):
-    global execution_mode
+    def split_list(alist, sep=','):
+        return [el.strip() for el in alist.split(sep)]
 
-    execution_mode = config.get('running', 'mode')
-    print("execution_mode:", execution_mode)
+    execution_mode = config['running']['mode']
+    filename = pathlib.Path(__file__).name
+    print(f"execution_mode ({filename}): {execution_mode}")
 
-    global rank
-    global read_offers
+    dev.init(config)
+    utils.init(config)
 
-    global classifier_path
-    global travel_offers_path
-    global classifier_columns
+    global user_columns
     global one_hot_col_cat
     global one_hot_col_cat_list
+    global classifier_columns
+    global clustering_columns
+    user_columns = split_list(config['thor.columns']['user_columns'])
+    one_hot_col_cat = split_list(config['thor.columns']['one_hot_categorical_columns'])
+    one_hot_col_cat_list = split_list(config['thor.columns']['one_hot_categorical_list_columns'])
+    classifier_columns = split_list(config['thor.columns']['classifier_columns'])
+    clustering_columns = split_list(config['thor.columns']['clustering_columns'])
 
-    one_hot_col_cat = [i.strip() for i in config['thor.columns']['one_hot_categorical_columns'].split(',')]
-    one_hot_col_cat_list = [i.strip() for i in config['thor.columns']['one_hot_categorical_list_columns'].split(',')]
-    classifier_columns = [i.strip() for i in config['thor.columns']['classifier_columns'].split(',')]
 
+    global read_offers
+    global get_user_model
+    global read_user_data
+    global write_user_model
+    global write_cluster
     if execution_mode == 'PRODUCTION':
-        rank = rank_prod
-        read_offers = read_offers_prod
-        classifier_path = config.get('thor', 'classifier_path')
-        travel_offers_path = config.get('thor', 'travel_offers_path')
+        read_offers = utils.read_offers
+        get_user_model = utils.get_user_model_cache
+        read_user_data = utils.read_user_data
+        write_user_model = utils.write_user_model
+        write_cluster = utils.write_cluster
     else:
-        rank = rank_prod
-        read_offers = read_offers_dev
-        classifier_path = pathlib.Path('data/users_classifier/')
-        travel_offers_path = pathlib.Path('data/travel_offers/')
+        read_offers = dev.read_offers
+        get_user_model = dev.get_user_model
+        read_user_data = dev.read_user_data
+        write_user_model = dev.write_user_model
+        write_cluster = dev.write_cluster
 
 
-def rank_dev(user, travel_offers):
-    import numpy as np
-    np.random.seed(seed=5509)
+# task 3
+def cluster_user(user):
+    users_dict = {}
+    clu_columns = []
 
-    ranked_offers = {}
+    print(f"cluster_user({user})")
+    clustering_df = pd.DataFrame(columns=user_columns, index=range(len(user)))
+    user_data = read_user_data(user)
 
-    noffers = len(travel_offers)
-    scores =  np.random.rand(noffers).tolist() 
+    clustering_df.loc[user, :] = user_data.loc[0, :]
 
-    offer_by_score = enumerate(sorted(zip(travel_offers, scores),
-                                      key=operator.itemgetter(1),
-                                      reverse=True
-                                      ),
-                               start=1
-                               )
+    new_user_data, new_columns = preprocessing_user_profile(clustering_df, one_hot_col_cat, one_hot_col_cat_list)
+    all_clus = [clu_columns.extend([i for i in new_columns if clu_col in i]) for clu_col in clustering_columns]
+    clu_columns = list(set(clu_columns))
+    clu_columns += clustering_columns
+    clustering_df = new_user_data[new_user_data.columns.intersection(clu_columns)]
 
+    columns_n = list(clustering_df.columns.values)
+    clustering_np = clustering_df.values
+    min_max_scaler = preprocessing.MinMaxScaler()
+    clustering_np_scaled = min_max_scaler.fit_transform(clustering_np)
+    clustering_df = pd.DataFrame(data=clustering_np_scaled, columns=columns_n, index=range(len(clustering_df)))
 
-    for rank, (offer_id, score) in offer_by_score:
-        ranked_offers[offer_id] = {"rank": rank, "score": score}
+    write_cluster(cluster_model, cluster_model_col)
 
-    return ranked_offers
+    common_cols = list(set(clustering_df.columns.values).intersection(set(cluster_model_col)))
+    uncommon_cols = list(set(cluster_model_col) - set(clustering_df.columns.values))
 
+    clustering_df2 = pd.DataFrame(columns=cluster_model_col, index=range(len(user)))
+    for user_id in range(len(user)):
+        clustering_df2.loc[user_id, common_cols] = clustering_df.loc[user_id, common_cols]
+        clustering_df2.loc[user_id, uncommon_cols] = 0
 
-def read_offers_dev(offer_id):
-    t_off = pd.read_csv(travel_offers_path / (offer_id + '.csv'))
-    return t_off
+    cl_label = cluster_model.predict(clustering_df2)
 
-def read_offers_prod(offer_id):
-    return offer_id
+    label = cl_label[user_id]
+    user_classifier, user_classifier_col = write_user_model(label)
+
+    return user_classifier, user_classifier_col
 
 
 # task 4
-def rank_prod(user, travel_offers):
+def rank(user, travel_offers):
     ranked_offers = {}
 
-    classifier_model = pickle.load(open(os.path.join(classifier_path, user + '_classifier.pkl'), 'rb'))
-    with open(os.path.join(classifier_path, user + '_columns.txt'), 'r') as f:
-        classifier_model_col = [i.split('\n')[0] for i in f.readlines()]
+    classifier_model, classifier_model_col = get_user_model(user)
+    print(f"user: {user} - classifier_model: {classifier_model}")
+    if classifier_model is None:
+        classifier_model, classifier_model_col = cluster_user(user)
 
     offer_scores = {}
     for offer_id in travel_offers:
