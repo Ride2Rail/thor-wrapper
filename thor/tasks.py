@@ -1,4 +1,7 @@
-from clustering import *
+from sklearn import preprocessing
+from data_preprocessing import *
+from classifiers import *
+
 
 # task 1
 def make_classifier_for_all_users(user_dataframes, classifier_columns, target_column, one_hot_col_cat, one_hot_col_cat_list):
@@ -31,8 +34,7 @@ def make_classifier_for_all_users(user_dataframes, classifier_columns, target_co
 # task 4
 def sort_offers(request_df, classifier_model, classifier_model_col, one_hot_col_cat, one_hot_col_cat_list, classifier_columns):
     request_df = request_df.reindex(sorted(request_df.columns), axis=1)
-    buying_prob = []
-    not_buying_prob = []
+    offer_scores = []
 
     for i, row in request_df.iterrows():
 
@@ -46,8 +48,6 @@ def sort_offers(request_df, classifier_model, classifier_model_col, one_hot_col_
 
         columns_n = list(classifier_df.columns.values)
         classifier_np = classifier_df.values
-        # min_max_scaler = preprocessing.MinMaxScaler()
-        # classifier_np_scaled = min_max_scaler.fit_transform(classifier_np)
         classifier_np_scaled = classifier_np
         classifier_df = pd.DataFrame(data=classifier_np_scaled, columns=columns_n, index=range(len(classifier_df)))
 
@@ -60,18 +60,9 @@ def sort_offers(request_df, classifier_model, classifier_model_col, one_hot_col_
             classifier_df2.loc[offer_id, uncommon_cols] = 0
 
         classifier_df2 = classifier_df2.fillna(0)
-        pred = classifier_model.predict(classifier_df2)
 
-        class_prob = classifier_model.predict_proba(classifier_df2)
-        if pred == 1:
-            buying_prob.append([t_off['Travel Offer ID'].values[0], class_prob[0, 1]])
-        else:
-            not_buying_prob.append([t_off['Travel Offer ID'].values[0], class_prob[0, 0]])
+        buy_proba = classifier_model.predict_proba(classifier_df2)[0, 1]
+        offer_scores.append((row['Travel Offer ID'], buy_proba))
 
-    buying_prob = sorted(buying_prob, key=lambda x: x[1], reverse=True)
-    not_buying_prob = sorted(not_buying_prob, key=lambda x: x[1])
-
-    sorted_offers_scores = buying_prob + not_buying_prob
-    sorted_travel_offers = [i[0] for i in sorted_offers_scores]
-
+    sorted_travel_offers = sorted(offer_scores, key=lambda x: x[1], reverse=True)
     return sorted_travel_offers

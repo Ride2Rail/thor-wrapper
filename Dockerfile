@@ -1,9 +1,11 @@
 FROM python:3.8
 
-ENV APP_NAME=weather.py
+ENV APP_NAME=thor-wrapper.py
 
 COPY "$APP_NAME" /code/"$APP_NAME"
 COPY thor-wrapper.conf /code/thor-wrapper.conf
+COPY thor /code/thor
+COPY loader /code/loader
 
 WORKDIR /code
 

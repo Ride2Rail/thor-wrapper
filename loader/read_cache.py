@@ -10,9 +10,6 @@ import random
 #request_id = '5c77f3ae-a19d-4306-8749-047b21a4dc4d'
 #request_id = '33f6888a-363d-42ae-b84b-ce61678ce763'
 
-#print(f'\n\n**************\n\nRequest Id: {request_id}\n\n')
-
-# config
 
 def get_all_request_ids(cache):
     all_request_ids = [k.decode() for k in cache.keys('*:*')]
@@ -41,8 +38,6 @@ def load_user_requests(user_id, cache):
 
 
 def load_request_data(request_id, cache, new_request=True):
-
-    # loading the fields that don't depend on the offer_id, but only on the request_id
 
     data = []
     request_data = {}
@@ -93,7 +88,6 @@ def load_request_data(request_id, cache, new_request=True):
     request_data['Destination'] = end_city
     request_data['Via'] = via_locations
 
-
     transfers = cache.get(f'{request_id}:max_transfers')
     if transfers:
         request_data['Transfers'] = f'Max {int(transfers.decode("utf-8"))}'
@@ -110,7 +104,6 @@ def load_request_data(request_id, cache, new_request=True):
             request_data[feature_name] = int(result.decode("utf-8"))
         else:
             request_data[feature_name] = 500
-
 
     key_map_3_a = {
         "Loyalty Card": "user_preferences:Loyalty/Reduction/Payment card",
@@ -148,21 +141,11 @@ def load_request_data(request_id, cache, new_request=True):
         else:
             request_data[feature_name] = 'unknown'
 
-
-    #print('\n\n******************\n\nREQUEST DATA')
-    #for k in request_data:
-    #    print(f'{k}: {request_data[k]}')
-
-
-    # loading offer-specific fields
     offer_ids = [offer.decode('utf-8')
                  for offer in cache.lrange(f'{request_id}:offers', 0, -1)]
-    #print(f'Offer ids: {offer_ids}')
-
 
     bought_offer_test = offer_ids[random.randint(0, len(offer_ids)-1)]  # for testing
     for offer_id in offer_ids:
-        #print(f'\n\n+++++++\nOffer id: {offer_id}')
         offer_data = {}
 
         offer_data['Travel Offer ID'] = offer_id
@@ -210,7 +193,6 @@ def load_request_data(request_id, cache, new_request=True):
 
         leg_ids = [leg.decode('utf-8')
                    for leg in cache.lrange(f'{request_id}:{offer_id}:legs', 0, -1)]
-        #print(f'Leg ids: {leg_ids}')
 
         key_map_6 = {
             "LegMode": "transportation_mode",
@@ -222,7 +204,6 @@ def load_request_data(request_id, cache, new_request=True):
         offer_data['LegLength'] = []
 
         for leg_id in leg_ids:
-            #print(f'\nLeg id: {leg_id}')
 
             for feature_name, cache_key in key_map_6.items():
                 result = cache.get(f'{request_id}:{offer_id}:{leg_id}:{cache_key}')
@@ -239,7 +220,7 @@ def load_request_data(request_id, cache, new_request=True):
         for feature_name in ["LegMode", "LegCarrier", "LegSeat", "LegLength"]:
             offer_data[feature_name] = str(offer_data[feature_name])
 
-        offer_data['Services'] = '[]'     # missing
+        offer_data['Services'] = '[]'     # missing in cache
 
         if not new_request:
             bought_tag = cache.get(f'{request_id}:{offer_id}:bought_tag')
@@ -249,10 +230,6 @@ def load_request_data(request_id, cache, new_request=True):
             # in testing
             else:
                 offer_data['Bought Tag'] = 1 if offer_id == bought_offer_test else 0
-
-        #print('\n\n******************\n\nOFFER DATA')
-        #for k in offer_data:
-        #    print(f'{k}: {offer_data[k]}')
 
         offer_data.update(request_data)
         data.append(offer_data)
