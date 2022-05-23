@@ -25,10 +25,6 @@ config.read(f'{service_name}.conf')
 ONE_HOT_CATEGORICAL_COLUMNS = config.get('thor.columns', 'one_hot_categorical_columns').split(', ')
 ONE_HOT_CATEGORICAL_LIST_COLUMNS = config.get('thor.columns', 'one_hot_categorical_list_columns').split(', ')
 CLASSIFIER_COLUMNS = config.get('thor.columns', 'classifier_columns').split(', ')
-USER_PROFILES_PATH = config.get('thor.paths', 'user_profiles_path')
-TRAVEL_OFFERS_PATH = config.get('thor.paths', 'travel_offers_path')
-CLASSIFIER_COLUMNS_PATH = config.get('thor.paths', 'classifier_columns_path')
-CLASSIFIER_PATH = config.get('thor.paths', 'classifier_path')
 TARGET_COLUMN = config.get('thor.columns', 'target_column')
 
 # logging
@@ -44,16 +40,19 @@ execution_mode = config.get('running', 'mode')
 
 
 
-@app.route('/train_classifier', methods=['GET'])
-def train_classifier_endpoint():
+@app.route('/train', methods=['GET'])
+def train_endpoint():
 
-    tasks.make_classifier_for_all_users(CLASSIFIER_COLUMNS,
-                                        USER_PROFILES_PATH,
-                                        TARGET_COLUMN,
-                                        ONE_HOT_CATEGORICAL_COLUMNS,
-                                        ONE_HOT_CATEGORICAL_LIST_COLUMNS,
-                                        CLASSIFIER_PATH,
-                                        CLASSIFIER_COLUMNS_PATH)
+    user_dataframes = [read_cache.load_user_requests(uid, cache) for uid in read_cache.get_all_user_ids(cache)]
+    classifier, classifier_columns_extended = tasks.make_classifier_for_all_users(user_dataframes,
+                                                                                  CLASSIFIER_COLUMNS,
+                                                                                  TARGET_COLUMN,
+                                                                                  ONE_HOT_CATEGORICAL_COLUMNS,
+                                                                                  ONE_HOT_CATEGORICAL_LIST_COLUMNS)
+
+    cache.set('classifier', pickle.dumps(classifier, protocol=pickle.HIGHEST_PROTOCOL))
+    cache.set('classifier_columns_extended', pickle.dumps(classifier_columns_extended, protocol=pickle.HIGHEST_PROTOCOL))
+    print('Classifier trained successfully and stored into cache.')
 
     response = app.response_class(
         status=200,
@@ -69,14 +68,17 @@ def rank_endpoint():
     data = request.get_json()
     request_id = data['request_id']
 
-    request_df = read_cache.load_request_data(request_id, cache)
+    request_df = read_cache.load_request_data(request_id, cache, new_request=True)
 
+    classifier = pickle.loads(cache.get('classifier'))
+    classifier_columns_extended = pickle.loads(cache.get('classifier_columns_extended'))
     ranked_offers = tasks.sort_offers(request_df,
-                                      CLASSIFIER_PATH,
-                                      CLASSIFIER_COLUMNS_PATH,
+                                      classifier,
+                                      classifier_columns_extended,
                                       ONE_HOT_CATEGORICAL_COLUMNS,
                                       ONE_HOT_CATEGORICAL_LIST_COLUMNS,
                                       CLASSIFIER_COLUMNS)
+    print('The offers have been ranked!')
 
     result = {}
     result["request_id"] = request_id
@@ -98,7 +100,7 @@ if __name__ == '__main__':
     from r2r_offer_utils.cli_utils import IntRange
 
     FLASK_PORT = 5000
-    REDIS_HOST = '172.18.0.2' #'localhost'
+    REDIS_HOST = '172.18.0.5' #'localhost'
     REDIS_PORT = 6379
 
     parser = argparse.ArgumentParser()

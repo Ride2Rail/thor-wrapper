@@ -3,6 +3,7 @@ import pandas as pd
 import redis
 import json
 from datetime import datetime
+import random
 
 #request_id = '5d244725-dde4-4b3a-9928-63148f88393e'
 #request_id = 'c1e5dbee-ae28-46fc-bcf7-1e6e583a706d'
@@ -12,14 +13,34 @@ from datetime import datetime
 #print(f'\n\n**************\n\nRequest Id: {request_id}\n\n')
 
 # config
-"""
-REDIS_HOST = '172.18.0.2'
-REDIS_PORT = 6379
 
-cache = redis.Redis(host=REDIS_HOST, port=REDIS_PORT)
-"""
+def get_all_request_ids(cache):
+    all_request_ids = [k.decode() for k in cache.keys('*:*')]
+    all_request_ids = set([k[:k.index(':')] for k in all_request_ids])
+    return all_request_ids
 
-def load_request_data(request_id, cache):
+
+def get_all_user_ids(cache):
+    request_ids = get_all_request_ids(cache)
+    user_ids = [cache.get(f'{rid}:user_id') for rid in request_ids]
+    user_ids = set([uid.decode('utf-8') for uid in user_ids if uid])
+    return user_ids
+
+
+def load_user_requests(user_id, cache):
+
+    all_request_ids = get_all_request_ids(cache)
+    request_dataframes = []
+    for rid in all_request_ids:
+        request_user = cache.get(f'{rid}:user_id')
+        if request_user and (request_user.decode('utf-8') == user_id):
+            request_dataframes.append(load_request_data(rid, cache, new_request=False))
+    df_user_requests = pd.concat(request_dataframes, ignore_index=True)
+    df_user_requests.fillna(0)
+    return df_user_requests
+
+
+def load_request_data(request_id, cache, new_request=True):
 
     # loading the fields that don't depend on the offer_id, but only on the request_id
 
@@ -30,7 +51,6 @@ def load_request_data(request_id, cache):
 
     key_map_1 = {
         "User ID": "user_id",
-        "Date Of Birth": "user_profile:birth",
         "city": "user_profile:city",
         "country": "user_profile:country",
         "Profile": "user_profile:profileDefault",
@@ -44,6 +64,12 @@ def load_request_data(request_id, cache):
             request_data[feature_name] = result.decode("utf-8")
         else:
             request_data[feature_name] = 'unknown'
+
+    date_of_birth = cache.get(f'{request_id}:user_profile:birth')
+    if date_of_birth:
+        request_data['Date Of Birth'] = date_of_birth.decode('utf-8')
+    else:
+        request_data['Date Of Birth'] = '1990-01-01'
 
     start_point = cache.get(f'{request_id}:start_point')
     if start_point:
@@ -72,7 +98,7 @@ def load_request_data(request_id, cache):
     if transfers:
         request_data['Transfers'] = f'Max {int(transfers.decode("utf-8"))}'
     else:
-        request_data['Transfers'] = None
+        request_data['Transfers'] = 'unknown'
 
     key_map_2 = {
         'Walking distance to stop': 'walking_dist_to_stop',
@@ -81,9 +107,9 @@ def load_request_data(request_id, cache):
     for feature_name, cache_key in key_map_2.items():
         result = cache.get(f'{request_id}:{cache_key}')
         if result:
-            request_data[feature_name] = float(result.decode("utf-8"))
+            request_data[feature_name] = int(result.decode("utf-8"))
         else:
-            request_data[feature_name] = 'None'
+            request_data[feature_name] = 500
 
 
     key_map_3_a = {
@@ -133,6 +159,8 @@ def load_request_data(request_id, cache):
                  for offer in cache.lrange(f'{request_id}:offers', 0, -1)]
     #print(f'Offer ids: {offer_ids}')
 
+
+    bought_offer_test = offer_ids[random.randint(0, len(offer_ids)-1)]  # for testing
     for offer_id in offer_ids:
         #print(f'\n\n+++++++\nOffer id: {offer_id}')
         offer_data = {}
@@ -212,6 +240,16 @@ def load_request_data(request_id, cache):
             offer_data[feature_name] = str(offer_data[feature_name])
 
         offer_data['Services'] = '[]'     # missing
+
+        if not new_request:
+            bought_tag = cache.get(f'{request_id}:{offer_id}:bought_tag')
+            # in production
+            if bought_tag:
+                offer_data['Bought Tag'] = bought_tag
+            # in testing
+            else:
+                offer_data['Bought Tag'] = 1 if offer_id == bought_offer_test else 0
+
         #print('\n\n******************\n\nOFFER DATA')
         #for k in offer_data:
         #    print(f'{k}: {offer_data[k]}')
@@ -221,3 +259,17 @@ def load_request_data(request_id, cache):
 
     df = pd.DataFrame(data)
     return df
+
+
+if __name__ == '__main__':
+
+    REDIS_HOST = '172.18.0.5'
+    REDIS_PORT = 6379
+
+    cache = redis.Redis(host=REDIS_HOST, port=REDIS_PORT)
+
+    all_user_ids = get_all_user_ids(cache)
+    for uid in all_user_ids:
+        print('\n\nUid:', uid)
+        df_user = load_user_requests(uid, cache)
+        print(df_user['Date Of Birth'])
