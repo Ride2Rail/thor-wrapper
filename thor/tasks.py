@@ -34,7 +34,7 @@ def make_classifier_for_all_users(user_dataframes, classifier_columns, target_co
 # task 4
 def sort_offers(request_df, classifier_model, classifier_model_col, one_hot_col_cat, one_hot_col_cat_list, classifier_columns):
     request_df = request_df.reindex(sorted(request_df.columns), axis=1)
-    offer_scores = []
+    offer_scores = {}
 
     for i, row in request_df.iterrows():
 
@@ -62,7 +62,7 @@ def sort_offers(request_df, classifier_model, classifier_model_col, one_hot_col_
         classifier_df2 = classifier_df2.fillna(0)
 
         buy_proba = classifier_model.predict_proba(classifier_df2)[0, 1]
-        offer_scores.append((row['Travel Offer ID'], buy_proba))
+        offer_scores[row['Travel Offer ID']] = buy_proba
 
-    sorted_travel_offers = sorted(offer_scores, key=lambda x: x[1], reverse=True)
-    return sorted_travel_offers
+    sorted_offers = {offer_id: offer_scores[offer_id] for offer_id in sorted(offer_scores, key=offer_scores.get, reverse=True)}
+    return sorted_offers

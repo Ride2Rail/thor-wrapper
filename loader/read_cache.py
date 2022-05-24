@@ -4,6 +4,13 @@ import redis
 import json
 from datetime import datetime
 import random
+import logging
+
+from r2r_offer_utils.logging import setup_logger
+
+# init logging
+logger, ch = setup_logger()
+logger.setLevel(logging.INFO)
 
 #request_id = '5d244725-dde4-4b3a-9928-63148f88393e'
 #request_id = 'c1e5dbee-ae28-46fc-bcf7-1e6e583a706d'
@@ -55,6 +62,7 @@ def load_request_data(request_id, cache, new_request=True):
     }
     for feature_name, cache_key in key_map_1.items():
         result = cache.get(f'{request_id}:{cache_key}')
+        #logger.info(result, type(result))
         if result:
             request_data[feature_name] = result.decode("utf-8")
         else:
@@ -144,7 +152,11 @@ def load_request_data(request_id, cache, new_request=True):
     offer_ids = [offer.decode('utf-8')
                  for offer in cache.lrange(f'{request_id}:offers', 0, -1)]
 
-    bought_offer_test = offer_ids[random.randint(0, len(offer_ids)-1)]  # for testing
+    if len(offer_ids) > 0:
+        bought_offer_test = offer_ids[random.randint(0, len(offer_ids)-1)]  # for testing
+    else:
+        raise Exception('The request contains 0 offers.')
+
     for offer_id in offer_ids:
         offer_data = {}
 
