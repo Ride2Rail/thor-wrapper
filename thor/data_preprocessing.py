@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
@@ -46,12 +44,15 @@ def preprocessing_user_profile(user_data, one_hot_col_cat, one_hot_col_cat_list)
 
     user_data_new, created_cols2 = make_one_hot_catlist_columns(user_data_new, one_hot_col_cat_list)
 
+
     if 'Walking distance to stop' in list(user_data_new.columns.values):
         user_data_new['Walking distance to stop'] = [int(str(i).split('m')[0]) for i in
                                                      list(user_data_new['Walking distance to stop'])]
     if 'Cycling distance to stop' in list(user_data_new.columns.values):
         user_data_new['Cycling distance to stop'] = [int(str(i).split('m')[0]) for i in
                                                      list(user_data_new['Cycling distance to stop'])]
+
+
     if 'Date Of Birth' in list(user_data_new.columns.values):
         try:
             user_data_new['Date Of Birth'] = [int(str(i).split('/')[2]) for i in list(user_data_new['Date Of Birth'])]
